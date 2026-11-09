@@ -1,0 +1,23 @@
+ID,Area,Scenario,Expected,Type,Automated in
+API-01,Auth,Login with valid credentials,200 and token,Positive,Postman
+API-02,Auth,Login with wrong password,401 and no token,Negative,Postman
+API-03,Catalogue,List products,200 with id name price stock,Positive,Postman
+API-04,Catalogue,Unknown product,404,Negative,Postman
+API-05,Orders,Create order without token,401,Security,Postman
+API-06,Orders,Create valid order,201 with total and remaining stock,Positive,Postman
+API-07,Orders,Stock after order,Reduced by ordered quantity,Integration,Postman
+API-08,Orders,Quantity of zero,400,Boundary,Postman
+API-09,Orders,Quantity sent as text,400,Negative,Postman
+API-10,Orders,Product is sold out,409,Negative,Postman
+API-11,Security,Customer reads another customer's order,403 and no order data,Security,Postman
+API-12,Orders,Customer reads own order,200 with correct total,Positive,Postman
+API-13,Orders,Unknown order,404,Negative,Postman
+DB-01,Database,Order changes stock and writes one row,Stock reduced and one order row,Integration,Pytest
+DB-02,Database,Rejected order,No stock change and no row,Negative,Pytest
+DB-03,Database,Failed insert inside a transaction,Stock update rolled back,Integration,Pytest
+DB-04,Database,Negative stock,Refused by database constraint,Boundary,Pytest
+DB-05,Security,Stored password,Not stored in plain text,Security,Pytest
+DB-06,Validation,"Quantity 0, -1, 11, text, decimal, boolean, null",400 and no write,Boundary,Pytest
+DB-07,Concurrency,25 buyers for 10 units,Exactly 10 succeed and 15 get 409,Concurrency,Pytest
+PERF-01,Performance,25 virtual users for 30 seconds,p95 under 800 ms and under 1% failures,Load,k6
+PERF-02,Performance,Database after load,Confirmed orders match rows and no overselling,Integrity,k6 + Python

@@ -1,0 +1,67 @@
+name: API QA
+on:
+  push:
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: shop
+          POSTGRES_USER: shop
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shop"
+          --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://shop:ci-only-password@localhost:5432/shop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: grafana/setup-k6-action@v1
+      - run: pip install -r requirements.txt
+      - run: npm install -g newman
+      - run: mkdir -p results
+      - name: Database tests
+        run: python -m pytest -q | tee results/pytest.txt
+      - name: Start the API
+        run: |
+          python -m shop.reset_db
+          nohup gunicorn shop.app:app --bind 127.0.0.1:8000 --workers 4 > results/server.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8000/api/health && break; sleep 1; done
+      - name: Postman collection
+        run: |
+          python -m shop.reset_db
+          newman run postman/shop-api.postman_collection.json \
+            -e postman/local.postman_environment.json \
+            --reporters cli,json --reporter-json-export results/newman.json | tee results/newman.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Load test
+        run: |
+          python -m shop.reset_db
+          k6 run --summary-export=results/k6-summary.json performance/load_test.js | tee results/k6.txt
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Database agrees with the API after load
+        run: python performance/check_after_load.py results/k6-summary.json | tee results/after-load.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-results
+          path: results/
+          if-no-files-found: ignore

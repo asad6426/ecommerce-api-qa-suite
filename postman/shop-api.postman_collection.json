@@ -1,0 +1,395 @@
+{
+  "info": {
+    "name": "Shop API QA",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "API-01 Login with valid credentials",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"alice\", \"password\": \"{{password}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.test('returns a token', () => pm.expect(body.token).to.be.a('string').and.not.empty);",
+              "pm.test('responds within 2 seconds', () => pm.expect(pm.response.responseTime).to.be.below(2000));",
+              "pm.environment.set('alice_token', body.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-02 Login with wrong password",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"alice\", \"password\": \"wrong\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 401', () => pm.response.to.have.status(401));",
+              "pm.test('returns no token', () => pm.expect(pm.response.json()).to.not.have.property('token'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-03 List products",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/products"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "const products = pm.response.json();",
+              "pm.test('returns three products', () => pm.expect(products).to.have.lengthOf(3));",
+              "pm.test('each product has the agreed fields', () => products.forEach(p =>",
+              "  pm.expect(p).to.have.all.keys('id', 'name', 'price', 'stock')));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-04 Unknown product",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/products/999"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-05 Order without a token",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"product_id\": 1, \"quantity\": 1}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 401', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-06 Create a valid order",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"product_id\": 1, \"quantity\": 2}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 201', () => pm.response.to.have.status(201));",
+              "const order = pm.response.json();",
+              "pm.test('total is price times quantity', () => pm.expect(order.total).to.eql(5000));",
+              "pm.test('reports remaining stock', () => pm.expect(order.stock_after).to.eql(8));",
+              "pm.environment.set('order_id', order.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-07 Stock after the order",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/products/1"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('stock was reduced', () => pm.expect(pm.response.json().stock).to.eql(8));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-08 Quantity of zero",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"product_id\": 1, \"quantity\": 0}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-09 Quantity sent as text",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"product_id\": 1, \"quantity\": \"two\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 400', () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-10 Sold-out product",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"product_id\": 3, \"quantity\": 1}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 409', () => pm.response.to.have.status(409));",
+              "pm.test('explains the problem', () => pm.expect(pm.response.json().error).to.include('stock'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Setup: login as the second customer",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{base_url}}/api/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\": \"bob\", \"password\": \"{{password}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.environment.set('bob_token', pm.response.json().token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-11 Another customer's order",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bob_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders/{{order_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 403', () => pm.response.to.have.status(403));",
+              "pm.test('leaks no order data', () => pm.expect(pm.response.json()).to.not.have.property('total'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-12 Own order",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders/{{order_id}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('total is correct', () => pm.expect(pm.response.json().total).to.eql(5000));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "API-13 Unknown order",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{alice_token}}"
+          }
+        ],
+        "url": "{{base_url}}/api/orders/999999"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 404', () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
